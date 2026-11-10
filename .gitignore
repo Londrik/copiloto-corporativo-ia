@@ -1,0 +1,24 @@
+Python
+
+pycache/
+*.py[cod]
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+Rust
+
+services/pii-sanitizer/target/
+Cargo.lock
+Go
+
+workers/pdf-engine/bin/
+workers/pdf-engine/vendor/
+GCP & Terraform
+
+.terraform/
+*.tfstate
+.tfstate.
+.env
+*.key.json
