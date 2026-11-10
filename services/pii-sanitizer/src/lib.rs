@@ -3,8 +3,7 @@ use regex::Regex;
 
 // DFA linear-time regex: O(n) sobre o tamanho da entrada, imune a ReDoS
 static CPF_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b")
-        .expect("Falha ao compilar regex de CPF")
+    Regex::new(r"\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b").expect("Falha ao compilar regex de CPF")
 });
 
 static CNPJ_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -14,9 +13,7 @@ static CNPJ_REGEX: Lazy<Regex> = Lazy::new(|| {
 
 /// Mascara CPFs preservando apenas os dígitos intermediários: ***.456.789-**
 pub fn sanitize_cpf(input: &str) -> String {
-    CPF_REGEX
-        .replace_all(input, "***.$2.$3-**")
-        .into_owned()
+    CPF_REGEX.replace_all(input, "***.$2.$3-**").into_owned()
 }
 
 /// Mascara CNPJs preservando a raiz corporativa: **.XXX.XXX/****-**
@@ -56,7 +53,10 @@ mod tests {
     fn test_cpf_masking_with_punctuation() {
         let raw = "Contrato do titular com CPF 123.456.789-00 registrado.";
         let clean = sanitize_cpf(raw);
-        assert_eq!(clean, "Contrato do titular com CPF ***.456.789-** registrado.");
+        assert_eq!(
+            clean,
+            "Contrato do titular com CPF ***.456.789-** registrado."
+        );
     }
 
     #[test]
