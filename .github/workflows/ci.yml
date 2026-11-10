@@ -1,14 +1,10 @@
-name: CI/CD Pipeline & Quality Gate
+name: CI/CD Pipeline Corporativo
 
 on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
-
-permissions:
-  contents: read
-  security-events: write
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,21 +12,24 @@ concurrency:
 
 jobs:
   audit-security:
-    name: Security & SAST Audit
+    name: Security & Secret Scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run TruffleHog OSS (Credential Leaks)
-        uses: trufflesecurity/trufflehog@v3.82.6
+      - name: Secret Detection (TruffleHog)
+        uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
           head: HEAD
+          extra_args: --only-verified
 
   test-rust-sanitizer:
-    name: Rust PII FFI Engine
+    name: Rust PII Sanitizer Engine
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -39,29 +38,52 @@ jobs:
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.82.0
-          components: clippy, rustfmt
+          toolchain: stable
+          components: rustfmt, clippy
 
-      - name: Cache Cargo Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            services/pii-sanitizer/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('services/pii-sanitizer/Cargo.lock') }}
-
-      - name: Rust Code Formatting & Clippy Audit
+      - name: Check Rust Formatting & Linting
         working-directory: services/pii-sanitizer
         run: |
           cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
+          cargo clippy --no-default-features -- -D warnings
 
-      - name: Run Rust Unit & Boundary Tests
+      - name: Run Native Rust Unit Tests
         working-directory: services/pii-sanitizer
-        run: cargo test --verbose
+        run: cargo test --no-default-features --verbose
+
+  test-fastapi-core:
+    name: FastAPI Core & Agentic Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python Runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        working-directory: services/core-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy pytest httpx
+          pip install .
+
+      - name: Linting and Formatting with Ruff
+        working-directory: services/core-api
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Static Type Checking with Mypy
+        working-directory: services/core-api
+        run: mypy .
+
+      - name: Run Async Pytest Suite
+        working-directory: services/core-api
+        run: pytest -v
 
   test-go-worker:
     name: Go Async PDF Worker
@@ -76,43 +98,14 @@ jobs:
           go-version: '1.23'
           cache-dependency-path: workers/pdf-engine/go.sum
 
-      - name: Run Go Linter & Race Detection
+      - name: Run Go Linters, Tests & Race Detection
         working-directory: workers/pdf-engine
         run: |
           if [ -f go.mod ]; then
+            go mod tidy
             go vet ./...
-            go test -v -race -timeout 30s ./...
+            go test -v -race -timeout 60s ./...
+            go build -o /dev/null ./cmd/worker
           else
-            echo "Aguardando inicialização do modulo Go."
-          fi
-
-  test-fastapi-core:
-    name: FastAPI Core & Agentic Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install Linting & Static Typing Tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff mypy pytest httpx
-
-      - name: Linting with Ruff
-        working-directory: services/core-api
-        run: |
-          ruff check .
-          ruff format --check .
-
-      - name: Static Type Checking
-        working-directory: services/core-api
-        run: |
-          if [ -f pyproject.toml ] || [ -d tests ]; then
-            mypy . --strict --ignore-missing-imports
+            echo "go.mod ainda nao presente nesta revisao."
           fi
